@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from typing import Optional
 
 SKILLS = [
     "Python", "SQL", "Java", "JavaScript", "TypeScript", "R", "C++", "Go", "Scala",
@@ -53,7 +54,7 @@ def parse_skills(jobs: list) -> list:
     return skill_records
 
 
-def _parse_datetime(value: str | None) -> str | None:
+def _parse_datetime(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
     try:
