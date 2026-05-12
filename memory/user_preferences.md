@@ -9,3 +9,8 @@ User handles all git commits and pushes himself — do not commit or push on his
 
 **Why:** He explicitly said he likes doing it himself.
 **How to apply:** Never offer to commit; never run git add/commit/push unless he asks.
+
+Add explanatory comments to all pipeline files so Michael can re-read and understand the code later.
+
+**Why:** He asked for this explicitly on extract.py and said to do it going forward.
+**How to apply:** Add inline comments explaining the "what" and "why" of non-obvious logic in every pipeline file written.
