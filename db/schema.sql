@@ -1,4 +1,7 @@
-CREATE TABLE IF NOT EXISTS jobs (
+CREATE DATABASE IF NOT EXISTS job_market_tracker;
+USE job_market_tracker;
+
+REATE TABLE IF NOT EXISTS jobs (
     id               VARCHAR(20)  PRIMARY KEY,
     title            VARCHAR(255) NOT NULL,
     company          VARCHAR(255) NOT NULL,
