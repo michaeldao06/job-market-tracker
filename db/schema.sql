@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS skills (
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (
-    snapshot_id INT AUTO_INCREMENT PRIMARY KEY,
-    pulled_at   DATETIME NOT NULL,
-    job_count   INT      NOT NULL
+    snapshot_id    INT AUTO_INCREMENT PRIMARY KEY,
+    pulled_at      DATETIME NOT NULL,
+    jobs_inserted  INT      NOT NULL,
+    total_jobs     INT      NOT NULL
 );
