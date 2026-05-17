@@ -4,11 +4,21 @@ from typing import Optional
 import mysql.connector
 from mysql.connector import Error
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI(title="Job Market Tracker API")
+
+# Allow the browser (Live Server or any local origin) to call the API.
+# Without this, browsers block cross-origin fetch requests.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 
 def get_connection():

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Market Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;1,300&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:       #f0ebe0;
+            --surface:  #e6dfd2;
+            --ink:      #1c1712;
+            --muted:    #8a7c6d;
+            --rule:     #c0b5a4;
+            --accent:   #c03a0c;
+            --num:      #1d5c30;
+            --bar-base: #c9bba8;
+        }
+
+        /* ── Grain overlay ────────────────────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+            opacity: 0.055;
+            pointer-events: none;
+            z-index: 9999;
+            mix-blend-mode: multiply;
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--bg);
+            color: var(--ink);
+            min-height: 100vh;
+            padding: 0 0 5rem;
+        }
+
+        /* ── Header ──────────────────────────────────────────────────── */
+        .masthead {
+            padding: 1.5rem 3rem 0;
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+
+        .masthead-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding-bottom: 0.6rem;
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .masthead-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--ink);
+        }
+
+        .masthead-meta {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+            text-align: right;
+        }
+
+        .masthead-title {
+            padding: 1rem 0 1.4rem;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .masthead-title h1 {
+            font-family: 'Fraunces', serif;
+            font-weight: 700;
+            font-size: clamp(2.4rem, 5vw, 4rem);
+            line-height: 1.05;
+            letter-spacing: -0.5px;
+            color: var(--ink);
+        }
+
+        .masthead-title h1 em {
+            font-style: italic;
+            font-weight: 300;
+            color: var(--accent);
+        }
+
+        /* ── Main content ─────────────────────────────────────────────── */
+        .page {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 0 3rem;
+        }
+
+        /* ── Section shared ──────────────────────────────────────────── */
+        .sec {
+            padding: 2rem 0;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .sec-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .sec-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 0.35rem;
+        }
+
+        .sec-title {
+            font-family: 'Fraunces', serif;
+            font-weight: 700;
+            font-size: 1.35rem;
+            line-height: 1.15;
+            color: var(--ink);
+        }
+
+        .sec-sub {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            margin-top: 0.3rem;
+            letter-spacing: 0.02em;
+        }
+
+        /* ── Two-column chart row ────────────────────────────────────── */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1.65fr 1fr;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .charts-row .sec {
+            border-bottom: none;
+            padding: 2rem 0;
+        }
+
+        .charts-row .sec:first-child {
+            padding-right: 2.5rem;
+            border-right: 1px solid var(--rule);
+        }
+
+        .charts-row .sec:last-child {
+            padding-left: 2.5rem;
+        }
+
+        /* ── Controls ─────────────────────────────────────────────────── */
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            padding-top: 0.25rem;
+        }
+
+        .controls label {
+            font-size: 0.62rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        input[type="number"] {
+            width: 52px;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--rule);
+            color: var(--ink);
+            padding: 0.2rem 0.3rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input[type="number"]:focus { border-bottom-color: var(--accent); }
+
+        button {
+            background: var(--ink);
+            color: var(--bg);
+            border: none;
+            border-radius: 0;
+            padding: 0.3rem 0.8rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        button:hover   { background: var(--accent); }
+        button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        /* ── Search bar ──────────────────────────────────────────────── */
+        .search-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--ink);
+            padding-bottom: 0;
+            max-width: 640px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--ink);
+            padding: 0.4rem 0;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        input[type="text"]::placeholder { color: var(--rule); }
+
+        .search-row button {
+            background: transparent;
+            color: var(--accent);
+            border: none;
+            padding: 0.4rem 0;
+            font-size: 0.68rem;
+            letter-spacing: 0.15em;
+        }
+
+        .search-row button:hover { background: transparent; color: var(--ink); }
+
+        /* ── Spinner ─────────────────────────────────────────────────── */
+        .spinner-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 160px;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--rule);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── State messages ──────────────────────────────────────────── */
+        .msg {
+            display: flex;
+            align-items: center;
+            min-height: 80px;
+            font-size: 0.75rem;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+        }
+
+        .msg.err { color: var(--accent); }
+
+        /* ── Tables ──────────────────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+
+        thead { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+
+        th {
+            text-align: left;
+            padding: 0.5rem 0.75rem 0.5rem 0;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        td {
+            padding: 0.55rem 0.75rem 0.55rem 0;
+            border-bottom: 1px solid var(--surface);
+            vertical-align: middle;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        /* Alternating row tint */
+        tbody tr:nth-child(even) td { background: var(--surface); }
+        tbody tr:hover td { background: #ddd5c6; }
+
+        tr:last-child td { border-bottom: 1px solid var(--ink); }
+
+        .num {
+            font-variant-numeric: tabular-nums;
+            color: var(--num);
+            font-weight: 500;
+        }
+
+        /* Result count */
+        .result-count {
+            font-size: 0.68rem;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+        }
+
+        .result-count strong { color: var(--ink); font-weight: 500; }
+
+        /* ── Load more button ────────────────────────────────────────── */
+        .load-more-btn {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid var(--rule);
+            border-radius: 0;
+            padding: 0.4rem 1.2rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: border-color 0.15s, color 0.15s;
+        }
+
+        .load-more-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+        /* ── Canvas ──────────────────────────────────────────────────── */
+        canvas { max-height: 340px; }
+
+        /* ── Responsive ──────────────────────────────────────────────── */
+        @media (max-width: 860px) {
+            .masthead, .page { padding-left: 1.25rem; padding-right: 1.25rem; }
+            .charts-row { grid-template-columns: 1fr; }
+            .charts-row .sec:first-child { border-right: none; border-bottom: 1px solid var(--rule); padding-right: 0; }
+            .charts-row .sec:last-child  { padding-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Masthead ───────────────────────────────────────────────────────── -->
+<div class="masthead">
+    <div class="masthead-top">
+        <span class="masthead-label">Job Market Tracker</span>
+        <div class="masthead-meta">
+            <div>Adzuna API &mdash; United States</div>
+            <div id="header-date"></div>
+        </div>
+    </div>
+    <div class="masthead-title">
+        <h1>Job Market <em>Intelligence</em></h1>
+    </div>
+</div>
+
+<!-- ── Content ───────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <!-- 01 & 02: Charts side by side, asymmetric -->
+    <div class="charts-row">
+
+        <section class="sec">
+            <div class="sec-header">
+                <div>
+                    <div class="sec-label">01 &mdash; Trending Skills</div>
+                    <h2 class="sec-title">Most In-Demand</h2>
+                    <p class="sec-sub">Ranked by total appearance frequency</p>
+                </div>
+                <div class="controls">
+                    <label for="trending-limit">Show</label>
+                    <input type="number" id="trending-limit" value="10" min="1" max="50">
+                    <button onclick="loadTrendingSkills()">Go</button>
+                </div>
+            </div>
+            <div id="trending-container">
+                <div class="spinner-wrap"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <section class="sec">
+            <div class="sec-header">
+                <div>
+                    <div class="sec-label">02 &mdash; Valuable Skills</div>
+                    <h2 class="sec-title">Highest Paid</h2>
+                    <p class="sec-sub">By avg max salary &middot; min. 10 jobs</p>
+                </div>
+                <div class="controls">
+                    <label for="valuable-limit">Show</label>
+                    <input type="number" id="valuable-limit" value="10" min="1" max="50">
+                    <button onclick="loadValuableSkills()">Go</button>
+                </div>
+            </div>
+            <div id="valuable-container">
+                <div class="spinner-wrap"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+    </div><!-- /.charts-row -->
+
+    <!-- 03: Salary table -->
+    <section class="sec">
+        <div class="sec-header">
+            <div>
+                <div class="sec-label">03 &mdash; Salary by Role</div>
+                <h2 class="sec-title">Compensation by Title</h2>
+                <p class="sec-sub">Jobs with salary data only &mdash; sorted by avg max salary</p>
+            </div>
+        </div>
+        <div id="salary-container">
+            <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+    </section>
+
+    <!-- 04: Job search -->
+    <section class="sec">
+        <div class="sec-header">
+            <div>
+                <div class="sec-label">04 &mdash; Job Search</div>
+                <h2 class="sec-title">Search by Skill</h2>
+                <p class="sec-sub">Find postings that require a specific skill</p>
+            </div>
+        </div>
+        <div class="search-row">
+            <input type="text" id="skill-input"
+                   placeholder="Python, AWS, Docker, Kubernetes…"
+                   onkeydown="if(event.key==='Enter') searchJobs()">
+            <button id="search-btn" onclick="searchJobs()">Search &rarr;</button>
+        </div>
+        <div id="search-container">
+            <div class="msg">Enter a skill above to search for matching jobs</div>
+        </div>
+    </section>
+
+</div><!-- /.page -->
+
+<script>
+    const API = 'http://127.0.0.1:8000';
+
+    let trendingChart = null;
+    let valuableChart  = null;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    const spinner  = () => `<div class="spinner-wrap"><div class="spinner"></div></div>`;
+    const errMsg   = msg => `<div class="msg err">&#9632; ${msg}</div>`;
+    const emptyMsg = msg => `<div class="msg">${msg}</div>`;
+    const fmt      = n  => Number(n).toLocaleString();
+
+    // Header date stamp
+    document.getElementById('header-date').textContent =
+        new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Chart.js scale config — editorial light-mode palette
+    function darkScales(xFormatter) {
+        return {
+            x: {
+                grid: { color: '#d8cfbf', lineWidth: 0.75 },
+                ticks: {
+                    color: '#8a7c6d',
+                    font: { family: 'IBM Plex Mono', size: 10 },
+                    ...(xFormatter ? { callback: xFormatter } : {})
+                },
+                border: { display: false },
+            },
+            y: {
+                grid: { display: false },
+                ticks: { color: '#1c1712', font: { family: 'IBM Plex Mono', size: 11 } },
+                border: { display: false },
+            }
+        };
+    }
+
+    // Returns bar colors: accent on the highest bar (index 0, sorted DESC), sand for rest
+    function barColors(count) {
+        return Array.from({ length: count }, (_, i) =>
+            i === 0 ? '#c03a0c' : '#c9bba8'
+        );
+    }
+
+    // ── Trending Skills ───────────────────────────────────────────────────────
+
+    async function loadTrendingSkills() {
+        const limit = document.getElementById('trending-limit').value || 10;
+        const el = document.getElementById('trending-container');
+        el.innerHTML = spinner();
+
+        try {
+            const res = await fetch(`${API}/skills/trending?limit=${limit}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (!data.length) { el.innerHTML = emptyMsg('No skill data found.'); return; }
+
+            el.innerHTML = '<canvas id="trending-chart"></canvas>';
+            if (trendingChart) trendingChart.destroy();
+
+            trendingChart = new Chart(
+                document.getElementById('trending-chart').getContext('2d'),
+                {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.skill_name),
+                        datasets: [{
+                            data: data.map(d => d.total_frequency),
+                            backgroundColor: barColors(data.length),
+                            borderWidth: 0,
+                            borderRadius: 0,
+                            barThickness: 14,
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1c1712',
+                                titleFont: { family: 'IBM Plex Mono' },
+                                bodyFont:  { family: 'IBM Plex Mono' },
+                                callbacks: { label: ctx => ` ${fmt(ctx.parsed.x)} appearances` }
+                            }
+                        },
+                        scales: darkScales()
+                    }
+                }
+            );
+        } catch (e) {
+            el.innerHTML = errMsg(`Could not load trending skills — ${e.message}`);
+        }
+    }
+
+    // ── Most Valuable Skills ──────────────────────────────────────────────────
+
+    async function loadValuableSkills() {
+        const limit = document.getElementById('valuable-limit').value || 10;
+        const el = document.getElementById('valuable-container');
+        el.innerHTML = spinner();
+
+        try {
+            const res = await fetch(`${API}/skills/valuable?limit=${limit}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (!data.length) { el.innerHTML = emptyMsg('No salary data found.'); return; }
+
+            el.innerHTML = '<canvas id="valuable-chart"></canvas>';
+            if (valuableChart) valuableChart.destroy();
+
+            valuableChart = new Chart(
+                document.getElementById('valuable-chart').getContext('2d'),
+                {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.skill_name),
+                        datasets: [{
+                            data: data.map(d => d.avg_salary_max),
+                            backgroundColor: barColors(data.length),
+                            borderWidth: 0,
+                            borderRadius: 0,
+                            barThickness: 14,
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1c1712',
+                                titleFont: { family: 'IBM Plex Mono' },
+                                bodyFont:  { family: 'IBM Plex Mono' },
+                                callbacks: { label: ctx => ` $${fmt(ctx.parsed.x)} avg max salary` }
+                            }
+                        },
+                        scales: darkScales(v => `$${fmt(v)}`)
+                    }
+                }
+            );
+        } catch (e) {
+            el.innerHTML = errMsg(`Could not load valuable skills — ${e.message}`);
+        }
+    }
+
+    // ── Salary by Role ────────────────────────────────────────────────────────
+
+    let salaryData  = [];
+    let salaryShown = 0;
+    const SALARY_INITIAL = 20;
+    const SALARY_MORE    = 40;
+
+    async function loadSalaryByRole() {
+        const el = document.getElementById('salary-container');
+        el.innerHTML = spinner();
+
+        try {
+            const res = await fetch(`${API}/salaries/by-role`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            salaryData  = await res.json();
+            salaryShown = 0;
+
+            if (!salaryData.length) { el.innerHTML = emptyMsg('No salary data found.'); return; }
+
+            el.innerHTML = `
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>Role</th>
+                            <th>Avg Min</th>
+                            <th>Avg Max</th>
+                            <th>Jobs</th>
+                        </tr></thead>
+                        <tbody id="salary-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="salary-load-more-wrap"></div>
+            `;
+
+            renderSalaryRows(SALARY_INITIAL);
+        } catch (e) {
+            el.innerHTML = errMsg(`Could not load salary data — ${e.message}`);
+        }
+    }
+
+    function renderSalaryRows(count) {
+        const tbody   = document.getElementById('salary-tbody');
+        const btnWrap = document.getElementById('salary-load-more-wrap');
+        const slice   = salaryData.slice(salaryShown, salaryShown + count);
+
+        slice.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${d.title}</td>
+                <td class="num">$${fmt(d.avg_salary_min)}</td>
+                <td class="num">$${fmt(d.avg_salary_max)}</td>
+                <td>${fmt(d.job_count)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        salaryShown += slice.length;
+
+        if (salaryShown < salaryData.length) {
+            const remaining = salaryData.length - salaryShown;
+            btnWrap.innerHTML = `
+                <button class="load-more-btn" onclick="renderSalaryRows(${SALARY_MORE})">
+                    Load ${SALARY_MORE} more &mdash; <span style="color:var(--muted)">${remaining} remaining</span>
+                </button>
+            `;
+        } else {
+            btnWrap.innerHTML = '';
+        }
+    }
+
+    // ── Job Search ────────────────────────────────────────────────────────────
+
+    async function searchJobs() {
+        const input = document.getElementById('skill-input');
+        const btn   = document.getElementById('search-btn');
+        const el    = document.getElementById('search-container');
+        const skill = input.value.trim();
+
+        if (!skill) { el.innerHTML = emptyMsg('Enter a skill to search.'); return; }
+
+        el.innerHTML = spinner();
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`${API}/jobs/search?skill=${encodeURIComponent(skill)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (!data.length) {
+                el.innerHTML = emptyMsg(`No jobs found for &ldquo;${skill}&rdquo;.`);
+                return;
+            }
+
+            const rows = data.map(d => `
+                <tr>
+                    <td>${d.title}</td>
+                    <td>${d.company}</td>
+                    <td>${d.location}</td>
+                    <td>${d.category}</td>
+                    <td>${d.date_posted ? d.date_posted.substring(0, 10) : '—'}</td>
+                </tr>
+            `).join('');
+
+            el.innerHTML = `
+                <p class="result-count">
+                    ${fmt(data.length)} result${data.length !== 1 ? 's' : ''} &mdash;
+                    <strong>${skill}</strong>
+                </p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>Title</th>
+                            <th>Company</th>
+                            <th>Location</th>
+                            <th>Category</th>
+                            <th>Date Posted</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+        } catch (e) {
+            el.innerHTML = errMsg(`Search failed — ${e.message}`);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+
+    loadTrendingSkills();
+    loadValuableSkills();
+    loadSalaryByRole();
+</script>
+
+</body>
+</html>
