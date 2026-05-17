@@ -41,7 +41,8 @@ job-market-tracker/
 │   └── main.py             # FastAPI app with 4 endpoints + serves the dashboard
 ├── frontend/
 │   └── index.html          # Single-page dashboard (no build step)
-├── start.py                # One-command launcher — starts server + opens browser
+├── refresh.py              # Runs pipeline + starts server + opens browser (fresh data)
+├── serve.py                # Starts server + opens browser only (data already loaded)
 └── .env                    # Your credentials (never committed)
 ```
 
@@ -86,24 +87,28 @@ This creates the `job_market_tracker` database and all three tables.
 
 ---
 
-## Running the Pipeline
+## Running the Project
 
+**`refresh.py` — first time setup or data refresh**
 ```bash
-python3 -m pipeline.load
+python3 refresh.py      # macOS / Linux
+python refresh.py       # Windows
+```
+Runs the full ETL pipeline (extract → transform → load), then starts the API server and opens the dashboard automatically. Use this when you want fresh data. The pipeline takes 1–2 minutes before the browser opens.
+
+**`serve.py` — quick launch when data is already loaded**
+```bash
+python3 serve.py        # macOS / Linux
+python serve.py         # Windows
+```
+Skips the pipeline entirely — starts the server and opens the browser in ~2 seconds. Use this for day-to-day access when you don't need to re-pull data.
+
+**Pipeline only — no server**
+```bash
+python3 -m pipeline.run
 ```
 
-This runs the full ETL — extract → transform → load. It fetches 5 job titles × 5 pages × 50 results and inserts them into MySQL. Expect it to take 1–2 minutes.
-
----
-
-## Launching the Dashboard
-
-```bash
-python3 start.py      # macOS / Linux
-python start.py       # Windows
-```
-
-Starts the API server and opens `http://127.0.0.1:8000` in your default browser automatically. Press `Ctrl-C` to stop.
+Press `Ctrl-C` to stop the server.
 
 ---
 
