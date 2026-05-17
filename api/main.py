@@ -132,3 +132,43 @@ def salaries_by_role():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
+
+
+# ── /skills/valuable ──────────────────────────────────────────────────────────
+
+@app.get("/skills/valuable")
+def skills_valuable(limit: int = Query(default=10, ge=1, description="Number of top skills to return")):
+    """
+    Returns the most valuable skills ranked by the average max salary of jobs they appear in.
+    Only considers jobs with actual salary data (salary_min > 0 AND salary_max > 0).
+    """
+    sql = """
+        SELECT
+            s.skill_name,
+            ROUND(AVG(j.salary_max)) AS avg_salary_max,
+            COUNT(*) AS job_count
+        FROM skills s
+        JOIN jobs j ON s.job_id = j.id
+        WHERE j.salary_min > 0 AND j.salary_max > 0
+        GROUP BY s.skill_name
+        HAVING job_count >= 10
+        ORDER BY avg_salary_max DESC
+        LIMIT %s
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(sql, (limit,))
+        rows = cursor.fetchall()
+        return rows
+
+    except Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
