@@ -5,6 +5,7 @@ import mysql.connector
 from mysql.connector import Error
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,6 +30,15 @@ def get_connection():
         password=os.getenv("DB_PASSWORD"),
         database=os.getenv("DB_NAME"),
     )
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/")
+def serve_dashboard():
+    """Serves the frontend dashboard so the whole app runs from one server."""
+    path = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'index.html')
+    return FileResponse(path)
 
 
 # ── /skills/trending ──────────────────────────────────────────────────────────
