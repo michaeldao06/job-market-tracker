@@ -1,0 +1,134 @@
+import os
+from typing import Optional
+
+import mysql.connector
+from mysql.connector import Error
+from fastapi import FastAPI, HTTPException, Query
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(title="Job Market Tracker API")
+
+
+def get_connection():
+    """Opens and returns a fresh MySQL connection using credentials from .env."""
+    return mysql.connector.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+    )
+
+
+# ── /skills/trending ──────────────────────────────────────────────────────────
+
+@app.get("/skills/trending")
+def skills_trending(limit: int = Query(default=10, ge=1, description="Number of top skills to return")):
+    """
+    Returns the top N skills ranked by total frequency across all job postings.
+    Useful for seeing what skills are most in-demand right now.
+    """
+    sql = """
+        SELECT skill_name, SUM(frequency) AS total_frequency
+        FROM skills
+        GROUP BY skill_name
+        ORDER BY total_frequency DESC
+        LIMIT %s
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        # dictionary=True makes each row a dict instead of a plain tuple
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(sql, (limit,))
+        rows = cursor.fetchall()
+        return rows
+
+    except Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+# ── /jobs/search ──────────────────────────────────────────────────────────────
+
+@app.get("/jobs/search")
+def jobs_search(skill: str = Query(..., description="Skill name to search for (case-insensitive)")):
+    """
+    Returns jobs that have a matching skill record.
+    JOIN pulls only jobs where the given skill appears in the skills table.
+    """
+    sql = """
+        SELECT DISTINCT j.id, j.title, j.company, j.location, j.category, j.date_posted
+        FROM jobs j
+        JOIN skills s ON j.id = s.job_id
+        WHERE LOWER(s.skill_name) = LOWER(%s)
+        ORDER BY j.date_posted DESC
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(sql, (skill,))
+        rows = cursor.fetchall()
+
+        # Convert datetime objects to strings so FastAPI can serialise them to JSON
+        for row in rows:
+            if row.get("date_posted"):
+                row["date_posted"] = str(row["date_posted"])
+
+        return rows
+
+    except Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+# ── /salaries/by-role ─────────────────────────────────────────────────────────
+
+@app.get("/salaries/by-role")
+def salaries_by_role():
+    """
+    Returns average salary range per job title, ordered by avg_salary_max descending.
+    Excludes jobs where salary data is missing or zero to keep averages meaningful.
+    """
+    sql = """
+        SELECT
+            title,
+            ROUND(AVG(salary_min)) AS avg_salary_min,
+            ROUND(AVG(salary_max)) AS avg_salary_max,
+            COUNT(*) AS job_count
+        FROM jobs
+        WHERE salary_min > 0 AND salary_max > 0
+        GROUP BY title
+        ORDER BY avg_salary_max DESC
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return rows
+
+    except Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
