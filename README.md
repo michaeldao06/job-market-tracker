@@ -2,7 +2,7 @@
 
 An ETL pipeline that pulls US job postings from the Adzuna API, cleans and stores them in MySQL, and serves real-time insights through a FastAPI backend and browser dashboard.
 
-<!-- Add a screenshot here once the dashboard is running -->
+![Dashboard](assets/dashboard.png)
 
 ---
 
