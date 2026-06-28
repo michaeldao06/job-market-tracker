@@ -192,3 +192,50 @@ def skills_valuable(limit: int = Query(default=10, ge=1, description="Number of 
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
+
+
+# ── /skills/timeseries ────────────────────────────────────────────────────────
+
+@app.get("/skills/timeseries")
+def skills_timeseries(skill: str = Query(..., description="Skill name to chart over time (case-insensitive)")):
+    """
+    Returns the per-run active job count (and avg max salary) for a skill over time,
+    one point per snapshot. LEFT JOIN so a run where the skill had zero active jobs
+    shows as 0 instead of dropping out; scoped to snapshots that actually have skill
+    data so pre-feature runs don't appear as fake zeros.
+    """
+    sql = """
+        SELECT sn.pulled_at,
+               COALESCE(ss.job_count, 0) AS job_count,
+               ss.avg_salary_max
+        FROM snapshots sn
+        JOIN (SELECT DISTINCT snapshot_id FROM skill_snapshots) have
+          ON have.snapshot_id = sn.snapshot_id
+        LEFT JOIN skill_snapshots ss
+          ON ss.snapshot_id = sn.snapshot_id
+         AND LOWER(ss.skill_name) = LOWER(%s)
+        ORDER BY sn.pulled_at ASC
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(sql, (skill,))
+        rows = cursor.fetchall()
+
+        # Convert datetime objects to strings so FastAPI can serialise them to JSON
+        for row in rows:
+            if row.get("pulled_at"):
+                row["pulled_at"] = str(row["pulled_at"])
+
+        return rows
+
+    except Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()

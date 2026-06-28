@@ -450,6 +450,24 @@
         </div>
     </section>
 
+    <!-- 05: Skill trend over time -->
+    <section class="sec">
+        <div class="sec-header">
+            <div>
+                <div class="sec-label">05 &mdash; Skill Trend</div>
+                <h2 class="sec-title">Demand Over Time</h2>
+                <p class="sec-sub">Active postings mentioning a skill, per pipeline run</p>
+            </div>
+            <div class="controls">
+                <label for="timeseries-skill">Skill</label>
+                <select id="timeseries-skill" onchange="loadSkillTimeSeries()"></select>
+            </div>
+        </div>
+        <div id="timeseries-container">
+            <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+    </section>
+
 </div><!-- /.page -->
 
 <script>
@@ -457,6 +475,7 @@
 
     let trendingChart = null;
     let valuableChart  = null;
+    let timeseriesChart = null;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -728,11 +747,94 @@
         }
     }
 
+    // ── Skill Trend Over Time ─────────────────────────────────────────────────
+
+    async function populateSkillDropdown() {
+        const sel = document.getElementById('timeseries-skill');
+        const el  = document.getElementById('timeseries-container');
+
+        try {
+            const res = await fetch(`${API}/skills/trending?limit=50`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (!data.length) { el.innerHTML = emptyMsg('No skills available yet.'); return; }
+
+            sel.innerHTML = data.map(d => `<option value="${d.skill_name}">${d.skill_name}</option>`).join('');
+            if ([...sel.options].some(o => o.value === 'Python')) sel.value = 'Python';
+
+            loadSkillTimeSeries();
+        } catch (e) {
+            el.innerHTML = errMsg(`Could not load skills — ${e.message}`);
+        }
+    }
+
+    async function loadSkillTimeSeries() {
+        const skill = document.getElementById('timeseries-skill').value;
+        const el = document.getElementById('timeseries-container');
+        if (!skill) { el.innerHTML = emptyMsg('Select a skill.'); return; }
+        el.innerHTML = spinner();
+
+        try {
+            const res = await fetch(`${API}/skills/timeseries?skill=${encodeURIComponent(skill)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (!data.length) { el.innerHTML = emptyMsg('No snapshots yet for this skill.'); return; }
+
+            el.innerHTML = '<canvas id="timeseries-chart"></canvas>';
+            if (timeseriesChart) timeseriesChart.destroy();
+
+            timeseriesChart = new Chart(
+                document.getElementById('timeseries-chart').getContext('2d'),
+                {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => d.pulled_at.substring(0, 19)),
+                        datasets: [{
+                            label: skill,
+                            data: data.map(d => d.job_count),
+                            borderColor: '#c03a0c',
+                            backgroundColor: 'rgba(192, 58, 12, 0.06)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#c03a0c',
+                            fill: true,
+                            tension: 0.3,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1c1712',
+                                titleFont: { family: 'IBM Plex Mono' },
+                                bodyFont:  { family: 'IBM Plex Mono' },
+                                callbacks: {
+                                    label: ctx => ` ${fmt(ctx.parsed.y)} active postings`,
+                                    afterLabel: ctx => {
+                                        const s = data[ctx.dataIndex].avg_salary_max;
+                                        return s ? `avg max salary $${fmt(s)}` : 'avg max salary —';
+                                    }
+                                }
+                            }
+                        },
+                        scales: darkScales()
+                    }
+                }
+            );
+        } catch (e) {
+            el.innerHTML = errMsg(`Could not load skill trend — ${e.message}`);
+        }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
 
     loadTrendingSkills();
     loadValuableSkills();
     loadSalaryByRole();
+    populateSkillDropdown();
 </script>
 
 </body>

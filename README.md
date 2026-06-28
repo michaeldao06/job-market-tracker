@@ -10,8 +10,8 @@ An ETL pipeline that pulls US job postings from the Adzuna API, cleans and store
 
 1. **Extract** — Fetches job postings for 5 roles (software engineer, data engineer, data analyst, AI engineer, backend developer) across 5 pages of results from the Adzuna API
 2. **Transform** — Cleans titles, normalizes dates, and parses in-demand skills from job descriptions using regex matching against a curated skills list
-3. **Load** — Inserts cleaned jobs and skill records into MySQL; logs each run as a snapshot
-4. **Serve** — FastAPI exposes four read-only endpoints; a single-page dashboard visualizes the data with Chart.js
+3. **Load** — Inserts cleaned jobs and de-duplicated skill records into MySQL; logs each run as a snapshot, overall and per-skill
+4. **Serve** — FastAPI exposes five read-only endpoints; a single-page dashboard visualizes the data with Chart.js, including a skill-demand time series
 
 ---
 
@@ -32,13 +32,14 @@ An ETL pipeline that pulls US job postings from the Adzuna API, cleans and store
 ```
 job-market-tracker/
 ├── db/
-│   └── schema.sql          # Run this first — creates the database and tables
+│   ├── schema.sql          # Run this first — creates the database and tables
+│   └── migrations/         # One-time, re-runnable upgrades for existing databases
 ├── pipeline/
 │   ├── extract.py          # Pulls job data from Adzuna API
 │   ├── transform.py        # Cleans data and parses skills from descriptions
 │   └── load.py             # Inserts into MySQL; run this to populate the DB
 ├── api/
-│   └── main.py             # FastAPI app with 4 endpoints + serves the dashboard
+│   └── main.py             # FastAPI app with 5 endpoints + serves the dashboard
 ├── frontend/
 │   └── index.html          # Single-page dashboard (no build step)
 ├── refresh.py              # Runs pipeline + starts server + opens browser (fresh data)
@@ -83,7 +84,7 @@ DB_NAME=job_market_tracker
 ```bash
 mysql -u root -p < db/schema.sql
 ```
-This creates the `job_market_tracker` database and all three tables.
+This creates the `job_market_tracker` database and all four tables. For a database created before a schema change, apply the matching script in `db/migrations/` instead — each one is safe to re-run.
 
 ---
 
@@ -118,6 +119,7 @@ Press `Ctrl-C` to stop the server.
 |---|---|---|
 | `GET /skills/trending` | `limit` (default 10) | Top skills by total appearance frequency |
 | `GET /skills/valuable` | `limit` (default 10) | Top skills by avg max salary (min. 10 jobs) |
+| `GET /skills/timeseries` | `skill` (required) | Active postings mentioning a skill over time (one point per run) |
 | `GET /jobs/search` | `skill` (required) | Jobs matching a specific skill |
 | `GET /salaries/by-role` | — | Avg salary range per job title |
 
