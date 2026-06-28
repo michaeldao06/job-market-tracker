@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     category         VARCHAR(255) NOT NULL,
     description      TEXT         NULL,
     date_posted      DATETIME     NOT NULL,
-    date_pulled      DATETIME     NOT NULL
+    date_pulled      DATETIME     NOT NULL,
+    last_seen        DATETIME     NULL
 );
 
 CREATE TABLE IF NOT EXISTS skills (
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS skills (
     job_id     VARCHAR(20)  NOT NULL,
     skill_name VARCHAR(100) NOT NULL,
     frequency  INT          NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_job_skill (job_id, skill_name),
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
 
@@ -30,4 +32,13 @@ CREATE TABLE IF NOT EXISTS snapshots (
     pulled_at      DATETIME NOT NULL,
     jobs_inserted  INT      NOT NULL,
     total_jobs     INT      NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skill_snapshots (
+    snapshot_id    INT          NOT NULL,
+    skill_name     VARCHAR(100) NOT NULL,
+    job_count      INT          NOT NULL,
+    avg_salary_max INT          NULL,
+    PRIMARY KEY (snapshot_id, skill_name),
+    FOREIGN KEY (snapshot_id) REFERENCES snapshots(snapshot_id) ON DELETE CASCADE
 );

@@ -28,21 +28,27 @@ def load(jobs: list, skills: list) -> None:
     conn = None
     cursor = None
 
+    # One timestamp for the whole run, to whole seconds, so the value stored in
+    # jobs.last_seen exactly equals the value used to filter skill_snapshots.
+    run_ts = datetime.now().replace(microsecond=0)
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
 
         jobs_inserted = _insert_jobs(cursor, jobs)
-        _insert_skills(cursor, skills)
+        skills_inserted = _insert_skills(cursor, skills)
+        _bump_last_seen(cursor, jobs, run_ts)
         total_jobs = _get_total_jobs(cursor)
-        _insert_snapshot(cursor, jobs_inserted, total_jobs)
+        snapshot_id = _insert_snapshot(cursor, run_ts, jobs_inserted, total_jobs)
+        _insert_skill_snapshots(cursor, snapshot_id, run_ts)
 
         # Commit all inserts together — if anything above raised, we never reach here
         conn.commit()
         print(f"\nLoad complete.")
         print(f"  Jobs inserted this run : {jobs_inserted}")
         print(f"  Total jobs in DB       : {total_jobs}")
-        print(f"  Skill records inserted : {len(skills)}")
+        print(f"  Skill records inserted : {skills_inserted}")
 
     except Error as e:
         print(f"Database error: {e}")
@@ -86,17 +92,20 @@ def _insert_jobs(cursor, jobs: list) -> int:
     return inserted
 
 
-def _insert_skills(cursor, skills: list) -> None:
+def _insert_skills(cursor, skills: list) -> int:
     """
-    Inserts skill records linked to their job via job_id.
-    Skills are re-inserted each run — they're tied to jobs via ON DELETE CASCADE.
+    Inserts skill records linked to their job via job_id. INSERT IGNORE + the
+    UNIQUE(job_id, skill_name) constraint de-duplicate within and across runs.
+    Returns the count of rows actually inserted (duplicates are skipped).
     """
     sql = """
-        INSERT INTO skills (job_id, skill_name, frequency)
+        INSERT IGNORE INTO skills (job_id, skill_name, frequency)
         VALUES (%(job_id)s, %(skill_name)s, %(frequency)s)
     """
     cursor.executemany(sql, skills)
-    print(f"Skill records inserted: {len(skills)}")
+    inserted = cursor.rowcount
+    print(f"Skill records: {len(skills)} processed, {inserted} new")
+    return inserted
 
 
 def _get_total_jobs(cursor) -> int:
@@ -106,13 +115,53 @@ def _get_total_jobs(cursor) -> int:
     return result[0] if result else 0
 
 
-def _insert_snapshot(cursor, jobs_inserted: int, total_jobs: int) -> None:
-    """Records a summary of this pipeline run in the snapshots table."""
+def _insert_snapshot(cursor, run_ts, jobs_inserted: int, total_jobs: int) -> int:
+    """
+    Records a summary of this pipeline run in the snapshots table and returns the
+    new snapshot_id. pulled_at uses the shared run_ts so it matches jobs.last_seen.
+    """
     sql = """
         INSERT INTO snapshots (pulled_at, jobs_inserted, total_jobs)
         VALUES (%s, %s, %s)
     """
-    cursor.execute(sql, (datetime.now(), jobs_inserted, total_jobs))
+    cursor.execute(sql, (run_ts, jobs_inserted, total_jobs))
+    return cursor.lastrowid
+
+
+def _bump_last_seen(cursor, jobs: list, run_ts) -> None:
+    """
+    Marks every job seen in this run as active now (last_seen = run_ts). Newly
+    inserted rows get last_seen here too — INSERT IGNORE leaves it NULL on insert.
+    INSERT IGNORE and the jobs_inserted rowcount are left untouched.
+    """
+    ids = [job["id"] for job in jobs]
+    if not ids:
+        return
+    placeholders = ", ".join(["%s"] * len(ids))
+    sql = f"UPDATE jobs SET last_seen = %s WHERE id IN ({placeholders})"
+    cursor.execute(sql, [run_ts, *ids])
+
+
+def _insert_skill_snapshots(cursor, snapshot_id: int, run_ts) -> None:
+    """
+    Appends one row per skill for this snapshot: how many DISTINCT jobs active this
+    run (last_seen = run_ts) mention the skill, plus their avg max salary. The inner
+    DISTINCT is redundant now skills is unique on (job_id, skill_name) — kept as a guard.
+    """
+    sql = """
+        INSERT INTO skill_snapshots (snapshot_id, skill_name, job_count, avg_salary_max)
+        SELECT %s, t.skill_name,
+               COUNT(*) AS job_count,
+               ROUND(AVG(NULLIF(t.salary_max, 0))) AS avg_salary_max
+        FROM (
+            SELECT DISTINCT s.job_id, s.skill_name, j.salary_max
+            FROM skills s
+            JOIN jobs j ON s.job_id = j.id
+            WHERE j.last_seen = %s
+        ) t
+        GROUP BY t.skill_name
+    """
+    cursor.execute(sql, (snapshot_id, run_ts))
 
 
 if __name__ == "__main__":
